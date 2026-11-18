@@ -16,6 +16,7 @@ class OVALConverter:
         self._rewriter = OVALASTRewriter(
             simplify=self._args.convert,
             naming_template=self._args.template,
+            convert_dnf=self._args.dnf,
         )
         self._resolver = OVALDefinitionResolver()
         self._filepath = self._resolve_filepath(self._args.filepath)
@@ -44,7 +45,7 @@ class OVALConverter:
         destination = self._resolve_filepath(self._args.output_file or self._filepath.name).with_suffix('.json')
 
         with open(destination, 'w') as f:
-            json.dump(value, f, ensure_ascii=False, indent=4)
+            json.dump(value, f, ensure_ascii=False, indent=None if self._args.no_format else 4)
 
     def _collect_targets(self, root):
         targets = set(root.definitions[:self._args.count])
@@ -93,6 +94,20 @@ class OVALConverter:
             dest='convert',
             default=True,
             help='disable convertion to simplified form'
+        )
+        parser.add_argument(
+            '--dnf',
+            action='store_true',
+            dest='dnf',
+            default=False,
+            help='convert criteria tree to dnf'
+        )
+        parser.add_argument(
+            '--no-format',
+            action='store_true',
+            dest='no_format',
+            default=False,
+            help='do not format output with indentations'
         )
 
         return parser.parse_args()

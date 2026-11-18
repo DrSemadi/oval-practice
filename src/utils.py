@@ -29,33 +29,44 @@ def resolve_criteria_to_dnf(node: ast.CriteriaNode, *cases: set):
             (2001, 2002, 2003)
             (2001, 2002, 2004)
     """
-    test_cases = []
+
+    new_test_cases = []
     child_criteria = []
 
     for child in node.children:
         if isinstance(child, ast.CriteriaNode):
             child_criteria.append(child)
         else:
-            test_cases.append(child)
+            new_test_cases.append(child)
 
-    match node.operator:
-        case 'AND' if cases:
-            for case in cases:
-                case.update(test_cases)
-        case 'AND' if not cases:
-            cases = (set(test_cases), )
-        case 'OR' if cases:
+    if node.operator == 'AND':
+        if not cases:
+            cases = (set(), )
+
+        for case in cases:
+            case.update(new_test_cases)
+
+        for child in child_criteria:
+            cases = tuple(resolve_criteria_to_dnf(child, *cases))
+
+        yield from cases
+
+        return
+
+    if cases:
+        if new_test_cases:
             new_cases = []
 
-            for test in test_cases:
+            for test in new_test_cases:
                 for case in cases:
                     new_case = case.copy()
                     new_case.add(test)
                     new_cases.append(new_case)
 
             cases = new_cases
-        case 'OR' if not cases:
-            yield from [{item} for item in test_cases]
+    else:
+        for item in new_test_cases:
+            yield {item}
 
     if not child_criteria:
         yield from cases

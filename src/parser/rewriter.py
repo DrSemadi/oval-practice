@@ -8,10 +8,11 @@ from src.utils import resolve_criteria_to_dnf
 class OVALASTRewriter(BaseVisiter):
     _subtype_node_name_match = re.compile(r'^\S+:(?P<Subtype>\S+)_(?P<Type>\S+)').match
 
-    def __init__(self, simplify: bool, naming_template: str):
+    def __init__(self, simplify: bool, naming_template: str, convert_dnf: bool):
         super().__init__()
         self.simplify = simplify
         self.naming_template = naming_template
+        self.convert_dnf = convert_dnf
 
     def visit_value(self, node: ast.ValueNode):
         if 'date' in node.attrs:
@@ -94,7 +95,7 @@ class OVALASTRewriter(BaseVisiter):
         node.subsume_children()
 
         # we have to do it here and not in visit_criteria because latter does not guarantee criteria subtree is complete
-        if self.simplify:
+        if self.simplify and self.convert_dnf:
             self._rewrite_criteria_tree(node)
 
         return node
