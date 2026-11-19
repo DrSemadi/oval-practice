@@ -2,6 +2,7 @@ import json
 import pdb
 from pathlib import Path
 from argparse import ArgumentParser
+from operator import attrgetter
 
 from src.parser.xml_parser import OVALParser
 from src.parser.rewriter import OVALASTRewriter
@@ -13,33 +14,57 @@ class OVALConverter:
         self._args = self._parse_arguments()
 
         self._parser = OVALParser()
-        self._rewriter = OVALASTRewriter(
-            simplify=self._args.convert,
-            naming_template=self._args.template,
-            convert_dnf=self._args.dnf,
-        )
-        self._resolver = OVALDefinitionResolver()
+        self._rewriter = OVALASTRewriter(simplify=self._args.convert)
+        self._resolver = OVALDefinitionResolver(naming_schema=self._args.template)
         self._filepath = self._resolve_filepath(self._args.filepath)
 
     def convert(self):
         root = self._parser.parse(str(self._filepath))
-        rewritten_root = self._rewriter.run(root)
+        self._rewriter.run(root)
 
         self._resolver.configure(root)
 
-        result = []
-
-        for definition in self._collect_targets(rewritten_root):
-            resolved = self._resolver.resolve(definition)
-
-            result.append(resolved.dump_simplified() if self._args.convert else resolved.dump())
-
-        self._dump_json(result)
+        if self._args.no_resolve:
+            self._convert(root)
+        else:
+            self._convert_with_resolve(root)
 
         if self._args.pdb:
             pdb.set_trace()
 
         return 0
+
+    def _convert_with_resolve(self, root):
+        result = []
+
+        for definition in self._collect_targets(root):
+            definition = self._resolver.resolve_definition(definition)
+
+            if self._args.dnf:
+                definition = self._resolver.criteria_to_dnf(definition)
+
+            result.append(definition.dump_simplified() if self._args.convert else definition.dump())
+
+        self._dump_json(result)
+
+    def _convert(self, root):
+        result = []
+        tests = []
+
+        for definition in self._collect_targets(root):
+            tests.extend(self._resolver.resolve_tests(definition))
+
+            if self._args.dnf:
+                definition = self._resolver.criteria_to_dnf(definition)
+
+            result.append(definition.dump_simplified() if self._args.convert else definition.dump())
+
+        tests = {
+            item.id: item.dump_simplified() if self._args.convert else item.dump()
+            for item in sorted(tests, key=attrgetter('id'))
+        }
+
+        self._dump_json({'definitions': result, 'tests': tests})
 
     def _dump_json(self, value):
         destination = self._resolve_filepath(self._args.output_file or self._filepath.name).with_suffix('.json')
@@ -53,7 +78,7 @@ class OVALConverter:
         for item in self._args.id:
             targets.add(root.definitions[item])
 
-        return targets
+        return sorted(targets, key=attrgetter('id'))
 
     @staticmethod
     def _parse_arguments():
@@ -108,6 +133,13 @@ class OVALConverter:
             dest='no_format',
             default=False,
             help='do not format output with indentations'
+        )
+        parser.add_argument(
+            '--no-resolve',
+            action='store_true',
+            dest='no_resolve',
+            default=False,
+            help='do not resolve criterion references; instead, create a dictionary with resolved tests'
         )
 
         return parser.parse_args()

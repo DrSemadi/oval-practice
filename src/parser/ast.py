@@ -497,6 +497,9 @@ class ReferenceNode(BaseNode):
             reference_id=reference_id
         )
 
+    def dump_simplified(self) -> str:
+        return self.id
+
 
 class TestCaseNode(BaseNode):
     def __repr__(self):

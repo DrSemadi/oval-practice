@@ -2,17 +2,14 @@ import re
 
 from src.base import BaseVisiter
 from src.parser import ast
-from src.utils import resolve_criteria_to_dnf
 
 
 class OVALASTRewriter(BaseVisiter):
     _subtype_node_name_match = re.compile(r'^\S+:(?P<Subtype>\S+)_(?P<Type>\S+)').match
 
-    def __init__(self, simplify: bool, naming_template: str, convert_dnf: bool):
+    def __init__(self, simplify: bool):
         super().__init__()
         self.simplify = simplify
-        self.naming_template = naming_template
-        self.convert_dnf = convert_dnf
 
     def visit_value(self, node: ast.ValueNode):
         if 'date' in node.attrs:
@@ -94,10 +91,6 @@ class OVALASTRewriter(BaseVisiter):
         node.subsume_attributes()
         node.subsume_children()
 
-        # we have to do it here and not in visit_criteria because latter does not guarantee criteria subtree is complete
-        if self.simplify and self.convert_dnf:
-            self._rewrite_criteria_tree(node)
-
         return node
 
     def visit_advisory(self, node: ast.AdvisoryNode):
@@ -178,30 +171,6 @@ class OVALASTRewriter(BaseVisiter):
                 reference_type=key.rsplit('_', 1)[0],
             )
 
-    def _rewrite_criteria_tree(self, node: ast.DefinitionNode):
-        new_children = []
-        cases = []
-
-        for child in node.find_children_by_type(ast.CriteriaNode):
-            cases.extend(resolve_criteria_to_dnf(child))
-
-        dnf_criteria = ast.CriteriaNode(oval_class='tests', parent=node, attrs={})
-        dnf_criteria.operator = 'OR'
-        new_children.append(dnf_criteria)
-
-        for num, case in enumerate(cases, start=1):
-            test_case = ast.TestCaseNode(
-                oval_class=self._format_naming_schema(num, 'test_case'),
-                parent=dnf_criteria,
-                attrs={}
-            )
-            test_case.children.extend(case)
-            dnf_criteria.children.append(test_case)
-
-        node.children = new_children
-
-        return node
-
     @staticmethod
     def _subsume_oval_definitions(node: ast.RootNode):
         if len(node.children) != 1:
@@ -211,6 +180,3 @@ class OVALASTRewriter(BaseVisiter):
 
         if oval_definitions.oval_class == 'oval_definitions':
             node.children = oval_definitions.children
-
-    def _format_naming_schema(self, num: int, name: str) -> str:
-        return self.naming_template.format(num=num, name=name)
